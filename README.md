@@ -143,6 +143,63 @@ Alongside that:
 | `rimworld_analyze` | best pawn for a job, idle pawns, bottlenecks, threats |
 | `rimworld_control` | speed, save, notify, bridge status |
 
+### Bill ingredient filters
+
+`rimworld_bills` keeps the existing compact list by default. Request `details: true` to
+inspect a bill's allowed ingredient definitions, recipe-compatible definitions, special
+filter states, durability and quality ranges. Search radius and allowed worker skill range
+are also exposed. These are live game definitions, so modded equipment uses its exact defName.
+
+```json
+{"action":"list","bench":490020,"details":true}
+```
+
+Use `set` to edit one bill's `ingredientFilter`. Omitted fields stay unchanged. For an
+explicit whitelist, clear the existing allowed ingredients first with `reset: "nothing"`,
+then supply `allowDefs`. For example, after checking that these definitions are allowed by
+the selected washing recipe:
+
+```json
+{
+  "action": "set",
+  "bench": 490020,
+  "index": 0,
+  "ingredientFilter": {
+    "reset": "nothing",
+    "allowDefs": ["Apparel_FlakVest", "Apparel_PowerArmor"],
+    "allowTainted": true,
+    "allowClean": false,
+    "hitPoints": {"min": 0, "max": 1},
+    "quality": {"min": "Awful", "max": "Legendary"}
+  }
+}
+```
+
+`allowDefs`, `disallowDefs`, `allowCategories`, and `disallowCategories` accept exact
+definition names. `reset: "recipe"` restores the recipe's allowed ingredients. Taint and
+clean-apparel flags filter the selected apparel types; they do not add types back to a
+whitelist. Recipe restrictions still apply, including restrictions imposed by mods.
+Within a single edit, reset is applied first, then allows, then disallows; a disallow wins
+if the same definition is selected by both lists or categories.
+Durability uses fractions from 0 to 1, and quality uses the ordered names Awful, Poor,
+Normal, Good, Excellent, Masterwork, Legendary. Supply both ends of any range.
+
+Bill-level `ingredientSearchRadius` accepts 0–999 cells and `allowedSkillRange` accepts
+integer levels 0–20, for example `{"min": 6, "max": 20}`. `worker: null` clears a pawn
+restriction. Filter editing applies to `set`; create a bill with `add` first if needed.
+Apply the change to each relevant batch bill separately. There is no dynamic market-value
+or smeltability predicate: build the explicit whitelist from inspected definitions.
+
+`rimworld_query` with `action: "thing_info"` now reports `smeltable`, `destroyable`,
+`tradeability`, `isApparel`, `thingCategories`, and `apparelTags` to help choose that
+whitelist. `marketValueStatBase`, when present, is an explicitly declared definition base
+stat, not the current value of an individual item: material, quality, damage, and other
+modifiers can change its actual value. A `smeltable` flag describes the definition; it
+does not automatically create a filter rule or guarantee a particular recycling recipe.
+
+Both the game DLL and companion MCP server must be updated for these fields. Restart
+RimWorld to load a new DLL and restart/reconnect the MCP client to refresh its tool schema.
+
 ### Two that carry more weight than their size suggests
 
 **`rimworld_query`** — the game's internal names rarely match what a person says. When

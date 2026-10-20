@@ -96,7 +96,7 @@ namespace AutoRim.Commands
     {
         public override string Name => "query.thing_info";
         public override string Description =>
-            "Details for one thing definition: build cost, stuff, research needed, size, and how it is made.";
+            "Details for one thing definition: build cost, stuff, categories, recycling flags, research needed, size, and how it is made.";
         public override bool RequiresGame => false;
 
         public override JsonValue Execute(JsonValue args)
@@ -108,7 +108,21 @@ namespace AutoRim.Commands
                 .Set("label", def.label ?? "")
                 .Set("description", def.description ?? "")
                 .Set("category", def.category.ToString())
-                .Set("techLevel", def.techLevel.ToString());
+                .Set("techLevel", def.techLevel.ToString())
+                .Set("smeltable", def.smeltable)
+                .Set("destroyable", def.destroyable)
+                .Set("tradeability", def.tradeability.ToString())
+                .Set("isApparel", def.IsApparel)
+                .Set("thingCategories", Describe.ToArray(
+                    (def.thingCategories ?? new List<ThingCategoryDef>()).Select(c => c.defName)));
+
+            // This is the definition's explicit stat base, not a live item's selling price.
+            // Stuff, condition, quality, and trade modifiers can all change actual value.
+            var marketValue = def.statBases?.FirstOrDefault(s => s.stat == StatDefOf.MarketValue);
+            if (marketValue != null)
+                result.Set("marketValueStatBase", marketValue.value);
+            if (def.apparel?.tags != null)
+                result.Set("apparelTags", Describe.ToArray(def.apparel.tags));
 
             if (def.stackLimit > 1) result.Set("stackLimit", def.stackLimit);
             if (def.category == ThingCategory.Building)

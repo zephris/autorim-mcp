@@ -46,6 +46,32 @@ const mapIndex = z
   .optional()
   .describe("Map index from map.info. Defaults to the map currently on screen.");
 
+const qualityLevels = ["Awful", "Poor", "Normal", "Good", "Excellent", "Masterwork", "Legendary"] as const;
+const ingredientHitPoints = z.object({
+  min: z.number().finite().min(0).max(1),
+  max: z.number().finite().min(0).max(1),
+}).strict().refine(({ min, max }) => min <= max, "min must not exceed max");
+const ingredientQuality = z.object({
+  min: z.enum(qualityLevels),
+  max: z.enum(qualityLevels),
+}).strict().refine(({ min, max }) => qualityLevels.indexOf(min) <= qualityLevels.indexOf(max), "min must not exceed max");
+const billSkillRange = z.object({
+  min: z.number().int().min(0).max(20),
+  max: z.number().int().min(0).max(20),
+}).strict().refine(({ min, max }) => min <= max, "min must not exceed max");
+const billIngredientFilter = z.object({
+  reset: z.enum(["nothing", "recipe"]).optional()
+    .describe("Optional starting filter: nothing clears allowed ingredients; recipe restores ingredients allowed by the recipe. Omit to edit the existing filter."),
+  allowDefs: z.array(z.string().min(1)).optional().describe("Exact ThingDef names to allow, within the recipe's ingredient restrictions."),
+  disallowDefs: z.array(z.string().min(1)).optional().describe("Exact ThingDef names to disallow."),
+  allowCategories: z.array(z.string().min(1)).optional().describe("Exact ThingCategoryDef names whose recipe-compatible ingredients should be allowed."),
+  disallowCategories: z.array(z.string().min(1)).optional().describe("Exact ThingCategoryDef names whose ingredients should be disallowed."),
+  allowTainted: z.boolean().optional().describe("Whether corpse-worn (tainted) apparel is allowed. Does not add apparel types excluded by the def filter."),
+  allowClean: z.boolean().optional().describe("Whether non-tainted apparel is allowed. Does not add apparel types excluded by the def filter."),
+  hitPoints: ingredientHitPoints.optional().describe("Inclusive ingredient durability fraction, 0..1; supply both min and max."),
+  quality: ingredientQuality.optional().describe("Inclusive ingredient quality range; supply both min and max."),
+}).strict().refine((filter) => Object.values(filter).some((value) => value !== undefined), "Supply at least one ingredient filter change");
+
 export interface ToolSpec {
   name: string;
   subsystem: string;
@@ -261,9 +287,9 @@ export const TOOLS: ToolSpec[] = [
     description:
       "Production orders on workbenches. This is where most of what the colony makes gets decided.\n" +
       "- list_workbenches: every bench, with its id.\n" +
-      "- list: bills on one `bench`.\n" +
+      "- list: bills on one `bench`. Use `details: true` for allowed ingredient defs, recipe-compatible defs, special filters, durability and quality ranges.\n" +
       "- add: needs `bench` and `recipe`. `repeat` is forever, count (with `repeatCount`) or target (with `targetCount`, meaning 'keep this many in stock').\n" +
-      "- set: change an existing bill by `index` — repeat mode, counts, `worker`, or `suspended`.\n" +
+      "- set: change an existing bill by `index` — repeat mode, counts, `worker` (null clears the restriction), `suspended`, ingredientSearchRadius, allowedSkillRange, or ingredientFilter. Filter edits are validated against recipe restrictions before applying.\n" +
       "- remove / reorder: by `index`. reorder takes `offset` (-1 moves it one place earlier).",
     actions: ["list_workbenches", "list", "add", "set", "remove", "reorder"],
     params: {
@@ -273,8 +299,12 @@ export const TOOLS: ToolSpec[] = [
       repeat: z.enum(["forever", "count", "target"]).optional(),
       repeatCount: z.number().int().optional(),
       targetCount: z.number().int().optional(),
-      worker: pawnRef.optional(),
+      worker: pawnRef.nullable().optional(),
       suspended: z.boolean().optional(),
+      details: z.boolean().optional().describe("For list: include full ingredient filter details. Defaults false to keep responses compact."),
+      ingredientSearchRadius: z.number().finite().min(0).max(999).optional().describe("For set: ingredient search radius in cells, 0..999 (999 is the game's effectively unlimited setting)."),
+      allowedSkillRange: billSkillRange.optional().describe("For set: inclusive allowed worker skill levels, 0..20; supply both min and max."),
+      ingredientFilter: billIngredientFilter.optional().describe("For set: patch the ingredient filter. Use reset:nothing plus allowDefs for an explicit whitelist; other settings remain unchanged when omitted."),
       offset: z.number().int().optional(),
       map: mapIndex,
       limit: z.number().int().optional(),
@@ -519,7 +549,7 @@ export const TOOLS: ToolSpec[] = [
     description:
       "Look up what the game calls things. Reach for this when a name is rejected as not found or ambiguous.\n" +
       "- search_defs: needs `type` (thing, terrain, recipe, research, work, skill, trait, hediff, pawnkind, biome, plant, weapon, apparel, building) and optionally `query`.\n" +
-      "- thing_info: needs `thing`. Build cost, materials, research needed, size, and which recipes make it.\n" +
+      "- thing_info: needs `thing`. Build cost, materials, research, size, recipes, smeltable/destroyable flags, tradeability, apparel categories and tags. marketValueStatBase, when present, is an explicit definition base value, not a live item's sale price.\n" +
       "- recipe_info: needs `recipe`. Ingredients, products, work amount, skill required, and which benches can run it.",
     actions: ["search_defs", "thing_info", "recipe_info"],
     params: {

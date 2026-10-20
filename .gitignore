@@ -26,3 +26,12 @@ desktop.ini
 # --- misc ---------------------------------------------------------------------------------
 *.log
 npm-debug.log*
+
+# Local build tools, caches and deployment rollback artifacts
+.build-tools/
+.npm-cache/
+pending-update/
+installed-backups/
+BILL-FILTER-UPDATE.md
+scripts/build-local.ps1
+scripts/install-pending-update.ps1

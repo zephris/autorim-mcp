@@ -72,12 +72,17 @@ namespace AutoRim.Commands
             throw error;
         }
 
-        public static JsonValue DescribeBill(Bill bill, int index)
+        public static JsonValue DescribeBill(Bill bill, int index, bool details = false)
         {
             var result = JsonValue.NewObject()
                 .Set("index", index)
                 .Set("label", bill.LabelCap)
                 .Set("recipe", bill.recipe?.defName ?? "");
+
+            result.Set("ingredientSearchRadius", bill.ingredientSearchRadius);
+            result.Set("allowedSkillRange", JsonValue.NewObject()
+                .Set("min", bill.allowedSkillRange.min).Set("max", bill.allowedSkillRange.max));
+            if (details) result.Set("ingredientFilter", BillFilterHelpers.Describe(bill));
 
             if (bill.suspended) result.Set("suspended", true);
 
@@ -144,13 +149,14 @@ namespace AutoRim.Commands
 
         public override JsonValue Execute(JsonValue args)
         {
-            var map = GameState.RequireMap();
+            var map = GameState.ResolveMap(args.Has("map") ? args.OptInt("map", 0) : (int?)null);
             var bench = BillHelpers.ResolveBench(args, map);
             var stack = BillHelpers.StackOf(bench);
 
+            bool details = args.Has("details") && BillFilterHelpers.Boolean(args["details"], "details");
             var array = JsonValue.NewArray();
             for (int i = 0; i < stack.Bills.Count; i++)
-                array.Add(BillHelpers.DescribeBill(stack.Bills[i], i));
+                array.Add(BillHelpers.DescribeBill(stack.Bills[i], i, details));
 
             return JsonValue.NewObject()
                 .Set("bench", Refs.Ref(bench))
@@ -251,16 +257,50 @@ namespace AutoRim.Commands
     {
         public override string Name => "bills.set";
         public override string Description =>
-            "Changes an existing bill: repeat mode, counts, worker restriction, suspended state.";
+            "Changes an existing bill: repeat mode, counts, worker restriction, suspended state, ingredient filters and ranges.";
 
         public override JsonValue Execute(JsonValue args)
         {
-            var map = GameState.RequireMap();
+            BillFilterHelpers.CheckFields(args, "map", "bench", "index", "repeat", "repeatCount", "targetCount", "worker", "suspended", "ingredientFilter", "ingredientSearchRadius", "allowedSkillRange");
+            var map = GameState.ResolveMap(args.Has("map") ? args.OptInt("map", 0) : (int?)null);
             var bench = BillHelpers.ResolveBench(args, map);
             var stack = BillHelpers.StackOf(bench);
             var bill = BillHelpers.BillAt(stack, args.RequireInt("index"));
 
             var changes = new List<string>();
+
+            // Resolve and validate everything before the first mutation, including legacy
+            // fields. In particular, an invalid filter must not leave a bill suspended.
+            ThingFilter preparedFilter = args.Has("ingredientFilter") ? BillFilterHelpers.Prepare(bill, args["ingredientFilter"]) : null;
+            float? radius = args.Has("ingredientSearchRadius") ? BillFilterHelpers.Number(args["ingredientSearchRadius"], "ingredientSearchRadius", 0, 999) : (float?)null;
+            IntRange? skillRange = args.Has("allowedSkillRange") ? BillFilterHelpers.SkillRange(args["allowedSkillRange"]) : (IntRange?)null;
+            if (args.Has("suspended")) BillFilterHelpers.Boolean(args["suspended"], "suspended");
+            if (args.Has("repeatCount")) BillFilterHelpers.Number(args["repeatCount"], "repeatCount", 1, int.MaxValue, true);
+            if (args.Has("targetCount")) BillFilterHelpers.Number(args["targetCount"], "targetCount", 1, int.MaxValue, true);
+            if (args.Has("repeat") && (args["repeat"].Type != JsonType.String || !new[] { "forever", "count", "repeat", "target", "until" }.Contains(args["repeat"].AsString().ToLowerInvariant())))
+                throw CommandException.BadArgs("repeat must be forever, count or target.");
+            if (!(bill is Bill_Production) && new[] { "repeat", "repeatCount", "targetCount", "worker" }.Any(args.Has))
+                throw CommandException.BadArgs("Repeat settings and worker restrictions require a production bill.");
+            Pawn resolvedWorker = null;
+            bool clearWorker = args.Has("worker") && (args["worker"].IsNull ||
+                (args["worker"].Type == JsonType.String && args["worker"].AsString() == ""));
+            if (args.Has("worker") && !clearWorker)
+            {
+                if (args["worker"].Type != JsonType.String && args["worker"].Type != JsonType.Number)
+                    throw CommandException.BadArgs("worker must be a pawn name, numeric id, or null.");
+                if (args["worker"].Type == JsonType.Number) BillFilterHelpers.Number(args["worker"], "worker", 0, int.MaxValue, true);
+                resolvedWorker = Refs.ResolvePawn(args, "worker");
+            }
+
+            if (preparedFilter != null)
+            {
+                bill.ingredientFilter.CopyAllowancesFrom(preparedFilter);
+                bill.ingredientFilter.AllowedHitPointsPercents = preparedFilter.AllowedHitPointsPercents;
+                bill.ingredientFilter.AllowedQualityLevels = preparedFilter.AllowedQualityLevels;
+                changes.Add("ingredientFilter updated");
+            }
+            if (radius.HasValue) { bill.ingredientSearchRadius = radius.Value; changes.Add($"ingredientSearchRadius={radius.Value}"); }
+            if (skillRange.HasValue) { bill.allowedSkillRange = skillRange.Value; changes.Add("allowedSkillRange updated"); }
 
             if (args.Has("suspended"))
             {
@@ -292,28 +332,27 @@ namespace AutoRim.Commands
 
                 if (args.Has("worker"))
                 {
-                    if (args["worker"].IsNull || args["worker"].AsString("") == "")
+                    if (clearWorker)
                     {
                         production.SetAnyPawnRestriction();
                         changes.Add("worker=anyone");
                     }
                     else
                     {
-                        var worker = Refs.ResolvePawn(args, "worker");
-                        production.SetPawnRestriction(worker);
-                        changes.Add($"worker={worker.LabelShort}");
+                        production.SetPawnRestriction(resolvedWorker);
+                        changes.Add($"worker={resolvedWorker.LabelShort}");
                     }
                 }
             }
 
             if (changes.Count == 0)
                 throw CommandException.BadArgs("Nothing to change.",
-                    "Pass one of: repeat, repeatCount, targetCount, worker, suspended.");
+                    "Pass repeat, repeatCount, targetCount, worker, suspended, ingredientFilter, ingredientSearchRadius or allowedSkillRange.");
 
             int index = stack.IndexOf(bill);
             return JsonValue.NewObject()
                 .Set("bench", Refs.Ref(bench))
-                .Set("bill", BillHelpers.DescribeBill(bill, index))
+                .Set("bill", BillHelpers.DescribeBill(bill, index, preparedFilter != null))
                 .Set("changes", Describe.ToArray(changes))
                 .Set("summary", $"Updated '{bill.LabelCap}': {string.Join(", ", changes.ToArray())}.");
         }

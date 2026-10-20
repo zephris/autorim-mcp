@@ -60,6 +60,10 @@
       <HintPath>$(RimWorldManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="netstandard">
+      <HintPath>$(RimWorldManagedDir)\netstandard.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="VerifyRimWorldRefs" BeforeTargets="BeforeBuild">
