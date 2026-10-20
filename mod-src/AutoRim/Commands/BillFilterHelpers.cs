@@ -124,6 +124,14 @@ namespace AutoRim.Commands
             }
             if (args.Has("allowTainted")) filter.SetAllow(Exact<SpecialThingFilterDef>("AllowDeadmansApparel"), Boolean(args["allowTainted"], "allowTainted"));
             if (args.Has("allowClean")) filter.SetAllow(Exact<SpecialThingFilterDef>("AllowNonDeadmansApparel"), Boolean(args["allowClean"], "allowClean"));
+            ApplyRanges(filter, args);
+            // Existing recipe-specific special restrictions continue to apply independently.
+            foreach (var def in filter.AllowedThingDefs.Where(d => !eligible.Contains(d)).ToList()) filter.SetAllow(def, false);
+            return filter;
+        }
+
+        internal static void ApplyRanges(ThingFilter filter, JsonValue args)
+        {
             if (args.Has("hitPoints"))
             {
                 var range = args["hitPoints"];
@@ -145,9 +153,6 @@ namespace AutoRim.Commands
                     throw CommandException.BadArgs("quality must have ordered min/max names from Awful through Legendary.");
                 filter.AllowedQualityLevels = new QualityRange(min, max);
             }
-            // Existing recipe-specific special restrictions continue to apply independently.
-            foreach (var def in filter.AllowedThingDefs.Where(d => !eligible.Contains(d)).ToList()) filter.SetAllow(def, false);
-            return filter;
         }
 
         internal static JsonValue Describe(Bill bill)

@@ -23,3 +23,11 @@ No gameplay or live API behavior tests have been performed for these changes. Do
 - Check performance and response sizes for large mod lists.
 
 The updated game DLL and MCP server must be used together. This branch is not a release and no pull request has been opened.
+
+## Storage filter extension
+
+Adds storage quality/durability ranges, independent tainted/clean switches, and independent biocoded/non-biocoded switches for weapons and apparel. `get_settings` exposes the current restrictions and complete type allowlist. Shares range validation with bill filters.
+
+Pending live QA: stockpile and shelf read/write round trips; range boundary handling; rejection of malformed/unknown fields without partial edits; preservation of omitted constraints, type allowlists, modded special filters and priority; each taint/biocoding combination; save/reload; storage groups and modded storage parents. No gameplay tests were run.
+
+Storage update checks: C# and TypeScript builds passed; eight MCP schema acceptance/rejection cases passed. Local DLL deployment is staged because Windows reported the installed DLL has a user-mapped section open. No game process was launched or stopped.

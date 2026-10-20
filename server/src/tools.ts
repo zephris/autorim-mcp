@@ -339,10 +339,11 @@ export const TOOLS: ToolSpec[] = [
     title: "Storage settings",
     description:
       "What a stockpile or shelf accepts, and how strongly it pulls items. Target either a `zone` (name or index) or a `building` (thing id).\n" +
-      "- get_settings: current priority and a sample of what is allowed.\n" +
+      "- get_settings: current priority, complete allowed defNames, quality/durability ranges, taint and biocoding switches.\n" +
       "- set_priority: low, normal, preferred, important, critical.\n" +
-      "- set_allowed: pass `things` (names) with `allow` true or false, or `all:true` to allow/disallow everything at once.",
-    actions: ["get_settings", "set_priority", "set_allowed"],
+      "- set_allowed: pass `things` (names) with `allow` true or false, or `all:true` to allow/disallow everything at once.\n" +
+      "- set_filter: pass `filter` to edit quality, durability, taint and biocoding rules atomically. Omitted fields preserve existing settings. Rules do not enable excluded item types.",
+    actions: ["get_settings", "set_priority", "set_allowed", "set_filter"],
     params: {
       zone: z.union([z.string(), z.number()]).optional(),
       building: z.number().int().optional(),
@@ -350,6 +351,16 @@ export const TOOLS: ToolSpec[] = [
       things: z.array(z.string()).optional(),
       allow: z.boolean().optional(),
       all: z.boolean().optional(),
+      filter: z.object({
+        quality: ingredientQuality.optional(),
+        hitPoints: ingredientHitPoints.optional().describe("Inclusive durability fraction 0..1."),
+        allowTainted: z.boolean().optional(),
+        allowClean: z.boolean().optional(),
+        allowBiocodedWeapons: z.boolean().optional(),
+        allowNonBiocodedWeapons: z.boolean().optional(),
+        allowBiocodedApparel: z.boolean().optional(),
+        allowNonBiocodedApparel: z.boolean().optional(),
+      }).strict().refine(value => Object.values(value).some(v => v !== undefined), "Supply at least one filter change").optional(),
     },
   },
   {

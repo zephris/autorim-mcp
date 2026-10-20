@@ -248,3 +248,15 @@ afterthought.
 .\scripts\rpc.ps1 colony.snapshot
 .\scripts\rpc.ps1 analyze.best_pawn_for '{"work":"Cooking"}'
 ```
+
+## Storage condition filters
+
+`rimworld_storage` now supports `set_filter` for stockpile zones and storage buildings. Use the existing `zone` or `building` target and a `filter` object:
+
+```json
+{"action":"set_filter","zone":"Armour","filter":{"quality":{"min":"Good","max":"Legendary"},"hitPoints":{"min":0.5,"max":1},"allowTainted":false,"allowClean":true,"allowBiocodedWeapons":false,"allowNonBiocodedWeapons":true,"allowBiocodedApparel":false,"allowNonBiocodedApparel":true}}
+```
+
+Durability is a fraction from 0 to 1. Quality endpoints use exact names from Awful through Legendary. Both endpoints are required when changing a range. Omitted fields preserve existing values; all supplied fields are validated before committing. These restrictions intersect with the existing item allowlist and do not enable additional item types. Biocoding is controlled separately for weapons and apparel using the game's native special filters, independent of who an item is coded to. `get_settings` returns the complete allowed defNames and all these condition controls under `filter`. Missing special filter definitions are omitted from inspection and rejected when explicitly edited.
+
+Restart the game and reconnect the MCP server after installing the updated bridge/server. Runtime QA remains pending.

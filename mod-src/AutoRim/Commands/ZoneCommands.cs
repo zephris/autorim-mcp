@@ -388,6 +388,7 @@ namespace AutoRim.Commands
             return JsonValue.NewObject()
                 .Set("target", label)
                 .Set("priority", settings.Priority.ToString())
+                .Set("filter", StorageFilterHelpers.Describe(settings.filter))
                 .Set("allowedCount", allowed.Count)
                 .Set("allowedSample", DefResolver.Describe(allowed.Take(30)))
                 .Set("note", allowed.Count > 30 ? "Showing the first 30 of the allowed things." : "");
